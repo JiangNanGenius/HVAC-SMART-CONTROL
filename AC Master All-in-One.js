@@ -1171,8 +1171,10 @@ function calculateAverageRoomTemp() {
           new_speed = Math.max(current_speed - FAN.speed_step, target_speed);
       }
 
+      // 关键修复：当目标已经是 0（应关风扇）时，不能再被 min_output 回拉到 140，
+      // 否则会出现“风扇一直卡在最小转速无法关闭”。
       if (new_speed > 0 && new_speed < FAN.min_output) {
-          new_speed = FAN.min_output;
+          new_speed = (target_speed <= 0) ? 0 : FAN.min_output;
       }
 
       debug(2, "风扇控制", `风扇速度平滑调整: ${current_speed} → ${new_speed} (目标: ${target_speed})`);
