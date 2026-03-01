@@ -1,8 +1,10 @@
-# HVAC-SMART-CONTROL
+# AC Master All-in-One V17
 
 ### 空调智能控制系统 (VRV-P/氟系统通用)  
 **Node-RED Function Node**  
-*版本 v4.1 | 大金VRV-P兼容（中宏+第三方面板+原厂网关） | 理论上支持所有氟系统空调*
+*版本 AC Master All-in-One V17 | 大金VRV-P兼容（中宏+第三方面板+原厂网关） | 理论上支持所有氟系统空调*
+
+> 主要脚本：`AC Master All-in-One.js`
 
 ---
 
