@@ -2144,9 +2144,8 @@ function calculateAverageRoomTemp() {
           status_text += " | 降频";
       }
 
-      // 设置节点状态
-      const fill = outdoor_status === "off" ? "grey" : (outdoor_status === "cool" ? "blue" : "red");
-      node.status({ fill: fill, shape: "dot", text: status_text });
+      // 设置节点状态（始终展示详细信息）
+      setPersistentNodeStatus("stage1", "dot");
 
       return {
           fan_speed_set,
@@ -2889,6 +2888,54 @@ function buildSnapshot(phase, extra) {
   };
 }
 
+function getOutdoorStatusForNodeStatus() {
+  let anyRoomHeating = false;
+  let anyRoomCooling = false;
+  const rooms = ["livingroom","bedroom1","bedroom2","bedroom3","studyroom","diningroom","bedroom1f","2faisle","kitchen","washroom"];
+
+  for (const room_id of rooms) {
+    const mode = flow.get(`${room_id}_inner_mode`) || "off";
+    if (mode === "heat") anyRoomHeating = true;
+    else if (["cool", "dry", "comfort"].includes(mode)) anyRoomCooling = true;
+  }
+
+  if (anyRoomHeating) return "heat";
+  if (anyRoomCooling) return "cool";
+  return "off";
+}
+
+function setPersistentNodeStatus(phase, shape = "dot") {
+  const rooms = ["livingroom","bedroom1","bedroom2","bedroom3","studyroom","diningroom","bedroom1f","2faisle","kitchen","washroom"];
+  let activeCount = 0;
+  for (const room_id of rooms) {
+    const mode = flow.get(`${room_id}_inner_mode`) || "off";
+    if (mode !== "off" && mode !== "fan_only") activeCount++;
+  }
+
+  const outdoor_status = getOutdoorStatusForNodeStatus();
+  const fan_speed_set = Number(flow.get("fan_speed_set") || 0);
+  const fan_speed = Number(flow.get("fan_speed") || 0);
+  const fan_power_switch_set = !!flow.get("fan_power_switch_set");
+  const fan_power_switch = !!flow.get("fan_power_switch");
+
+  const fan_on = fan_power_switch_set || fan_power_switch || fan_speed_set > 0 || fan_speed > 0;
+  const fan_text = fan_on ? `${Math.max(fan_speed_set, fan_speed, 0)}` : "off";
+
+  const text =
+    `${String(phase || "idle")} | 外机:${outdoor_status === "off" ? "关" : (outdoor_status === "cool" ? "冷" : "热")}` +
+    ` | 内机:${activeCount}` +
+    ` | 风扇:${fan_text}` +
+    ` | 翅片:${flow.get("outdoor_fin_temp") ?? "-"}℃` +
+    ` | 设备:${flow.get("device_room_temp") ?? "-"}℃` +
+    ` | 功率:${flow.get("system_power") ?? "-"}W` +
+    ` | 新风:${flow.get("ventilation_status") || "off"}` +
+    `${flow.get("water_spray_set") ? " | 喷水" : ""}` +
+    `${flow.get("derating_flag") ? " | 降频" : ""}`;
+
+  const fill = outdoor_status === "off" ? "grey" : (outdoor_status === "cool" ? "blue" : "red");
+  node.status({ fill, shape, text });
+}
+
 /** =========================
  *  10) 主入口：根据输入消息分发
  *  ========================= */
@@ -2922,7 +2969,7 @@ try {
       for (const suf of rk) flow.set(`${r}${suf}`, null);
     }
 
-    node.status({ fill: "grey", shape: "dot", text: "🧹reset | cleared" });
+    setPersistentNodeStatus("reset", "dot");
     outSnap = buildSnapshot("reset", { note: "cleared" });
     return [null, null, null, outSnap, null];
   }
@@ -2942,7 +2989,7 @@ try {
   // ---- 10.4 周期 tick：开始 poll1（阶段由外部 delay 链生成） ----
   const isTick = (msg && (msg.payload === "tick" || msg._event === "tick"));
   if (isTick) {
-    node.status({ fill: "grey", shape: "ring", text: "⏱ tick | poll1" });
+    setPersistentNodeStatus("tick", "ring");
     outQueries = buildAllQueryMsgs();
 
     // 重要：本版本不再由 OUT5 输出 phase 消息，而是由「tick 注入 → delay → 回灌」链路生成 stage1/poll2/stage2
@@ -2955,14 +3002,14 @@ try {
     const phase = msg._phase;
 
     if (phase === "poll2") {
-      node.status({ fill: "blue", shape: "ring", text: "🔄 poll2 | refresh states" });
+      setPersistentNodeStatus("poll2", "ring");
       outQueries = buildAllQueryMsgs();
       outSnap = buildSnapshot("poll2", { note: "poll2" });
       return [outQueries, null, null, outSnap, null];
     }
 
     if (phase === "stage1") {
-      node.status({ fill: "yellow", shape: "dot", text: "⚙ stage1 | compute + send" });
+      setPersistentNodeStatus("stage1", "dot");
       // 先用最新点位更新 device_room_temp
       computeDeviceRoomTemp();
 
@@ -2989,7 +3036,7 @@ try {
     }
 
     if (phase === "stage2") {
-      node.status({ fill: "yellow", shape: "dot", text: "🛡 stage2 | PTC safety sync" });
+      setPersistentNodeStatus("stage2", "dot");
       // 运行 PTC 联动（它会写 flow：${room}_ptc_hardware_command 等）
       const ptcResult = runPTCLinkedControl();
 
